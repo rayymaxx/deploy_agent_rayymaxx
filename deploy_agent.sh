@@ -202,4 +202,38 @@ archive_logs() {
     return 0
 }
 
+deploy() {
+    preflight_checks || return 1
+    enable_trap
+    ask_project_name  || { disable_trap; return 1; }
+    create_structure  || { disable_trap; return 1; }
+    build_roster      || { disable_trap; return 1; }
+    set_permissions   || { disable_trap; return 1; }
+    update_thresholds || { disable_trap; return 1; }
+    disable_trap                      # trap covers deployment only
+    msg "Deployment complete. Verifying by running the application..."
+    run_app "$PROJECT_NAME"
+}
 
+# ---------- Menu ----------
+main_menu() {
+    while true; do
+        echo
+        echo "===== Attendance Tracker Deploy Agent ====="
+        echo "1) Deploy application"
+        echo "2) Run application"
+        echo "3) Archive logs"
+        echo "4) Exit"
+        read -r -p "Choose an option [1-4]: " opt || { echo; echo "Input closed. Goodbye."; exit 0; }
+        case "$opt" in
+            1) deploy ;;
+            2) run_app ;;
+            3) archive_logs ;;
+            4) echo "Goodbye."; exit 0 ;;
+            *) err "Invalid option." ;;
+        esac
+    done
+}
+
+cd "$START_DIR" || exit 1
+main_menu
