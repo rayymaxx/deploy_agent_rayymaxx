@@ -77,4 +77,55 @@ create_structure() {
     echo "Directory structure created and fixed files copied."
 }
 
+SAMPLE_NAMES=("Alice Johnson" "Bob Smith" "Carol Davis" "David Lee" "Eva Martinez"
+              "Frank Wilson" "Grace Kim" "Henry Brown" "Irene Clark" "Jack Turner"
+              "Karen White" "Liam Scott" "Maria Lopez" "Noah Adams" "Olivia Reed"
+              "Peter Young" "Quinn Baker" "Rachel Green" "Sam Carter" "Tina Evans")
+SAMPLE_EMAILS=("alice@example.com" "bob@example.com" "carol@example.com" "david@example.com"
+               "eva@example.com" "frank@example.com" "grace@example.com" "henry@example.com"
+               "irene@example.com" "jack@example.com" "karen@example.com" "liam@example.com"
+               "maria@example.com" "noah@example.com" "olivia@example.com" "peter@example.com"
+               "quinn@example.com" "rachel@example.com" "sam@example.com" "tina@example.com")
+
+ask_count() {   
+    local max="$1" n
+    while true; do
+        read -r -p "How many students (1-$max)? " n
+        if is_positive_int "$n" && (( n <= max )); then COUNT="$n"; return; fi
+        err "Enter a whole number between 1 and $max."
+    done
+}
+
+build_roster() {
+    local csv="$PROJECT_DIR/Helpers/assets.csv"
+    local cfg="$PROJECT_DIR/Helpers/config.json"
+    echo "How should the roster be built?"
+    echo "  A) Copy from the template (sample students with 4 prior sessions)"
+    echo "  B) Generate a fresh roster (all counts start at 0)"
+    local choice
+    while true; do
+        read -r -p "Choose A or B: " choice
+        [[ "$choice" =~ ^[AaBb]$ ]] && break
+        err "Please enter A or B."
+    done
+
+    if [[ "$choice" =~ ^[Aa]$ ]]; then
+        local available
+        available=$(tail -n +2 "$TEMPLATES_DIR/assets.csv" | grep -c .)
+        ask_count "$available"
+        head -n $(( COUNT + 1 )) "$TEMPLATES_DIR/assets.csv" > "$csv" || return 1
+        echo "Copied header + $COUNT students. total_sessions stays at 5."
+    else
+        local max=${#SAMPLE_NAMES[@]}
+        ask_count "$max"
+        echo "Email,Names,Attendance Count,Absence Count" > "$csv"
+        for (( i=0; i<COUNT; i++ )); do
+            echo "${SAMPLE_EMAILS[$i]},${SAMPLE_NAMES[$i]},0,0" >> "$csv"
+        done
+        # fresh roster = first session, so edit the DEPLOYED config (not the template)
+        sed -i.bak 's/\("total_sessions":[[:space:]]*\)[0-9][0-9]*/\11/' "$cfg" && rm -f "$cfg.bak"
+        echo "Generated $COUNT students. total_sessions set to 1."
+    fi
+}
+
 
