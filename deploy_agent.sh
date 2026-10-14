@@ -58,3 +58,23 @@ ask_project_name() {
     return 0
 }
 
+create_structure() {
+    mkdir -p "$PROJECT_DIR/Helpers" "$PROJECT_DIR/reports" 2>/dev/null || {
+        err "Could not create directories (permission denied?)."
+        return 1
+    }
+    for f in attendance_checker.py config.json assets.csv; do
+        if [[ ! -f "$TEMPLATES_DIR/$f" ]]; then
+            err "Missing template: templates/$f"
+            return 1
+        fi
+    done
+    cp "$TEMPLATES_DIR/attendance_checker.py" "$PROJECT_DIR/attendance_checker.py" &&
+    cp "$TEMPLATES_DIR/config.json" "$PROJECT_DIR/Helpers/config.json" || {
+        err "Failed to copy template files."
+        return 1
+    }
+    echo "Directory structure created and fixed files copied."
+}
+
+
