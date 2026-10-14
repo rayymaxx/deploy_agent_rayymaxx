@@ -8,7 +8,7 @@ The Python application (`attendance_checker.py`) is **never modified**. Everythi
 here is shell scripting around it: deployment, configuration, execution, log
 archival and interrupt handling.
 
-
+Video Walkthrough: https://youtu.be/gTgz0KgcwW0
 
 ---
 
@@ -447,6 +447,6 @@ Archived: .../reports/absent.log     -> .../archives/absent/absent_20261014_0315
 
 ---
 
-_Video walkthrough: add link here._
+_Video walkthrough: https://youtu.be/gTgz0KgcwW0_
 
 
