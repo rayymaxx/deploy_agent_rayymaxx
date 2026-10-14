@@ -1,9 +1,13 @@
-#!/bin/bash 
+#!/bin/bash
+
+
 
 START_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   # where the script lives
 TEMPLATES_DIR="$START_DIR/templates"
 PROJECT_NAME=""      # the {input} part, set during deploy
 PROJECT_DIR=""       # attendance_tracker_{input}
+DIR_CREATED=0        # 1 only once THIS run has created the project directory
+
 
 msg()  { echo -e "\n>> $*"; }
 err()  { echo "ERROR: $*" >&2; }
@@ -12,9 +16,6 @@ is_positive_int() { [[ "$1" =~ ^[1-9][0-9]*$ ]]; }
 is_percent()      { [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 0 && 10#$1 <= 100 )); }
 is_valid_name()   { [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]]; }
 
-# Placeholders for trap logic
-enable_trap()  { :; }
-disable_trap() { :; }
 
 preflight_checks() {
     local missing=0
@@ -30,10 +31,11 @@ preflight_checks() {
     return 0
 }
 
+
 ask_project_name() {
     local input
     while true; do
-        read -r -p "Enter a name for the project (letters, numbers, - and _ only): " input
+        read -r -p "Enter a name for the project (letters, numbers, - and _ only): " input || eof_abort
         if [[ -z "$input" ]]; then
             err "Name cannot be empty."
         elif ! is_valid_name "$input"; then
@@ -58,7 +60,9 @@ ask_project_name() {
     return 0
 }
 
+
 create_structure() {
+    DIR_CREATED=1    # from here on the interrupt handler may zip + delete this directory
     mkdir -p "$PROJECT_DIR/Helpers" "$PROJECT_DIR/reports" 2>/dev/null || {
         err "Could not create directories (permission denied?)."
         return 1
@@ -77,6 +81,7 @@ create_structure() {
     echo "Directory structure created and fixed files copied."
 }
 
+
 SAMPLE_NAMES=("Alice Johnson" "Bob Smith" "Carol Davis" "David Lee" "Eva Martinez"
               "Frank Wilson" "Grace Kim" "Henry Brown" "Irene Clark" "Jack Turner"
               "Karen White" "Liam Scott" "Maria Lopez" "Noah Adams" "Olivia Reed"
@@ -87,10 +92,10 @@ SAMPLE_EMAILS=("alice@example.com" "bob@example.com" "carol@example.com" "david@
                "maria@example.com" "noah@example.com" "olivia@example.com" "peter@example.com"
                "quinn@example.com" "rachel@example.com" "sam@example.com" "tina@example.com")
 
-ask_count() {   
+ask_count() {   # usage: ask_count <max>  -> sets COUNT
     local max="$1" n
     while true; do
-        read -r -p "How many students (1-$max)? " n
+        read -r -p "How many students (1-$max)? " n || eof_abort
         if is_positive_int "$n" && (( n <= max )); then COUNT="$n"; return; fi
         err "Enter a whole number between 1 and $max."
     done
@@ -104,7 +109,7 @@ build_roster() {
     echo "  B) Generate a fresh roster (all counts start at 0)"
     local choice
     while true; do
-        read -r -p "Choose A or B: " choice
+        read -r -p "Choose A or B: " choice || eof_abort
         [[ "$choice" =~ ^[AaBb]$ ]] && break
         err "Please enter A or B."
     done
@@ -128,6 +133,7 @@ build_roster() {
     fi
 }
 
+
 set_permissions() {
     chmod +x "$PROJECT_DIR/attendance_checker.py" &&
     chmod 600 "$PROJECT_DIR/Helpers/config.json" || {
@@ -138,10 +144,11 @@ set_permissions() {
     ls -l "$PROJECT_DIR/attendance_checker.py" "$PROJECT_DIR/Helpers/config.json"
 }
 
-read_threshold() {   
+
+read_threshold() {   # usage: read_threshold <label> <default> -> sets THRESHOLD_VALUE
     local label="$1" def="$2" val
     while true; do
-        read -r -p "New $label threshold [default $def]: " val
+        read -r -p "New $label threshold [default $def]: " val || eof_abort
         val="${val:-$def}"
         if is_percent "$val"; then THRESHOLD_VALUE=$((10#$val)); return; fi
         err "Must be a whole number between 0 and 100."
@@ -168,7 +175,8 @@ update_thresholds() {
     grep -E '"warning"|"failure"' "$cfg"
 }
 
-run_app() {   
+
+run_app() {   # usage: run_app [project_name]
     local name="${1:-}"
     if [[ -z "$name" ]]; then
         echo "Deployed projects:"; ls -d "$START_DIR"/attendance_tracker_*/ 2>/dev/null | xargs -n1 basename 2>/dev/null
@@ -179,6 +187,7 @@ run_app() {
     if [[ ! -f "$dir/attendance_checker.py" ]]; then err "attendance_checker.py missing in $dir."; return 1; fi
     ( cd "$dir" && python3 attendance_checker.py )
 }
+
 
 archive_logs() {
     read -r -p "Project name to archive logs for: " name
@@ -202,20 +211,71 @@ archive_logs() {
     return 0
 }
 
+
+handle_interrupt() {
+    local sig="$1"
+    trap '' INT TSTP                 # ignore further signals while cleaning up
+    echo
+    echo "!! Deployment interrupted (${sig}). Cleaning up..."
+    cd "$START_DIR" || exit 1        # make sure zip/rm run from the right place
+
+    # Only touch the directory if THIS run created it. Without this check, an
+    # interrupt at the "overwrite?" prompt would zip and delete a pre-existing project.
+    if [[ "$DIR_CREATED" -eq 1 && -n "$PROJECT_NAME" && -d "$PROJECT_DIR" ]]; then
+        local base="attendance_tracker_${PROJECT_NAME}"
+        local zipfile="${base}_archive.zip"
+        local entries; entries=$(find "$base" | wc -l)
+        rm -f "$zipfile"             # start from a fresh archive
+        if zip -rq "$zipfile" "$base"; then
+            echo "Archived incomplete project ($entries entries) -> $START_DIR/$zipfile"
+            rm -rf "$base" && echo "Removed incomplete directory: $base"
+        else
+            err "zip failed, so '$base' was left in place to avoid losing your work."
+        fi
+    else
+        echo "Nothing had been created yet, so there is nothing to archive."
+    fi
+
+    echo "Session closed cleanly."
+    case "$sig" in INT) exit 130 ;; TSTP) exit 148 ;; *) exit 1 ;; esac
+}
+
+
+eof_abort() {
+    echo; err "Input closed before the deployment finished."
+    handle_interrupt EOF
+}
+
+enable_trap()  { trap 'handle_interrupt INT' INT; trap 'handle_interrupt TSTP' TSTP; }
+disable_trap() { trap - INT TSTP; }
+
+# Used when a deploy step FAILS (not interrupted): remove the half-made project.
+fail_deploy() {
+    disable_trap
+    if [[ "$DIR_CREATED" -eq 1 && -d "$PROJECT_DIR" ]]; then
+        rm -rf "$PROJECT_DIR" && echo "Removed incomplete project directory after the error."
+    fi
+    DIR_CREATED=0
+    return 1
+}
+
+
 deploy() {
+    DIR_CREATED=0; PROJECT_NAME=""; PROJECT_DIR=""
     preflight_checks || return 1
-    enable_trap
-    ask_project_name  || { disable_trap; return 1; }
-    create_structure  || { disable_trap; return 1; }
-    build_roster      || { disable_trap; return 1; }
-    set_permissions   || { disable_trap; return 1; }
-    update_thresholds || { disable_trap; return 1; }
-    disable_trap                      # trap covers deployment only
+    enable_trap                       # trap is active for the whole setup phase
+    ask_project_name  || { disable_trap; return 1; }   # nothing created yet
+    create_structure  || { fail_deploy; return 1; }
+    build_roster      || { fail_deploy; return 1; }
+    set_permissions   || { fail_deploy; return 1; }
+    update_thresholds || { fail_deploy; return 1; }
+    disable_trap                      # trap covers deployment only, not the marking session
+    DIR_CREATED=0
     msg "Deployment complete. Verifying by running the application..."
     run_app "$PROJECT_NAME"
 }
 
-# ---------- Menu ----------
+
 main_menu() {
     while true; do
         echo
