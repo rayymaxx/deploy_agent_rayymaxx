@@ -128,4 +128,14 @@ build_roster() {
     fi
 }
 
+set_permissions() {
+    chmod +x "$PROJECT_DIR/attendance_checker.py" &&
+    chmod 600 "$PROJECT_DIR/Helpers/config.json" || {
+        err "Could not set permissions."
+        return 1
+    }
+    echo "Permissions set:"
+    ls -l "$PROJECT_DIR/attendance_checker.py" "$PROJECT_DIR/Helpers/config.json"
+}
+
 
