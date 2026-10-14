@@ -168,4 +168,16 @@ update_thresholds() {
     grep -E '"warning"|"failure"' "$cfg"
 }
 
+run_app() {   
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        echo "Deployed projects:"; ls -d "$START_DIR"/attendance_tracker_*/ 2>/dev/null | xargs -n1 basename 2>/dev/null
+        read -r -p "Project name to run (the part after attendance_tracker_): " name
+    fi
+    local dir="$START_DIR/attendance_tracker_${name}"
+    if [[ ! -d "$dir" ]]; then err "Project '$dir' does not exist. Deploy it first."; return 1; fi
+    if [[ ! -f "$dir/attendance_checker.py" ]]; then err "attendance_checker.py missing in $dir."; return 1; fi
+    ( cd "$dir" && python3 attendance_checker.py )
+}
+
 
