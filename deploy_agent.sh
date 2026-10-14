@@ -16,4 +16,18 @@ is_valid_name()   { [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]]; }
 enable_trap()  { :; }
 disable_trap() { :; }
 
+preflight_checks() {
+    local missing=0
+    for tool in python3 zip; do
+        if ! command -v "$tool" > /dev/null 2>&1; then
+            err "'$tool' is not installed. Please install it and try again."
+            missing=1
+        fi
+    done
+    (( missing )) && return 1
+    echo "Found: $(python3 --version 2>&1)"
+    echo "Found: zip ($(command -v zip))"
+    return 0
+}
+
 
