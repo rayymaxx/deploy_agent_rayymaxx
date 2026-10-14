@@ -138,4 +138,34 @@ set_permissions() {
     ls -l "$PROJECT_DIR/attendance_checker.py" "$PROJECT_DIR/Helpers/config.json"
 }
 
+read_threshold() {   
+    local label="$1" def="$2" val
+    while true; do
+        read -r -p "New $label threshold [default $def]: " val
+        val="${val:-$def}"
+        if is_percent "$val"; then THRESHOLD_VALUE=$((10#$val)); return; fi
+        err "Must be a whole number between 0 and 100."
+    done
+}
+
+update_thresholds() {
+    local cfg="$PROJECT_DIR/Helpers/config.json"
+    read -r -p "Update the attendance alert thresholds? (y/n): " ans
+    [[ "$ans" =~ ^[Yy]$ ]] || { echo "Keeping default thresholds."; return 0; }
+
+    local warn fail
+    while true; do
+        read_threshold "warning" 75; warn=$THRESHOLD_VALUE
+        read_threshold "failure" 50; fail=$THRESHOLD_VALUE
+        (( fail < warn )) && break
+        err "Failure ($fail) must be lower than warning ($warn). Try again."
+    done
+
+    sed -i.bak -e "s/\(\"warning\":[[:space:]]*\)[0-9][0-9]*/\1$warn/" \
+               -e "s/\(\"failure\":[[:space:]]*\)[0-9][0-9]*/\1$fail/" "$cfg" &&
+        rm -f "$cfg.bak" || { err "Failed to update config.json."; return 1; }
+    echo "Thresholds updated: warning=$warn, failure=$fail"
+    grep -E '"warning"|"failure"' "$cfg"
+}
+
 
