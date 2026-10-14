@@ -180,4 +180,26 @@ run_app() {
     ( cd "$dir" && python3 attendance_checker.py )
 }
 
+archive_logs() {
+    read -r -p "Project name to archive logs for: " name
+    local dir="$START_DIR/attendance_tracker_${name}"
+    [[ -d "$dir" ]] || { err "Project '$dir' does not exist."; return 1; }
+
+    local ts; ts=$(date +%Y%m%d_%H%M%S)          # one timestamp for both logs
+    local archived=0
+    for log in attendance absent; do
+        local src="$dir/reports/${log}.log"
+        local dest_dir="$dir/archives/$log"
+        local dest="$dest_dir/${log}_${ts}.log"
+        if [[ -f "$src" ]]; then
+            mkdir -p "$dest_dir" && cp "$src" "$dest" && {
+                echo "Archived: $src -> $dest"; archived=$((archived+1)); }
+        else
+            echo "Skipped: reports/${log}.log does not exist (nothing to archive)."
+        fi
+    done
+    (( archived == 0 )) && echo "No logs were archived."
+    return 0
+}
+
 
