@@ -30,4 +30,31 @@ preflight_checks() {
     return 0
 }
 
+ask_project_name() {
+    local input
+    while true; do
+        read -r -p "Enter a name for the project (letters, numbers, - and _ only): " input
+        if [[ -z "$input" ]]; then
+            err "Name cannot be empty."
+        elif ! is_valid_name "$input"; then
+            err "Invalid name. No spaces, slashes, or special characters."
+        else
+            break
+        fi
+    done
+    PROJECT_NAME="$input"
+    PROJECT_DIR="$START_DIR/attendance_tracker_${PROJECT_NAME}"
+
+    if [[ -e "$PROJECT_DIR" ]]; then
+        read -r -p "'attendance_tracker_${PROJECT_NAME}' already exists. Overwrite? (y/n): " ans
+        if [[ "$ans" =~ ^[Yy]$ ]]; then
+            rm -rf "$PROJECT_DIR" || { err "Could not remove existing directory."; return 1; }
+            echo "Old directory removed."
+        else
+            err "Deployment aborted. Existing directory left untouched."
+            return 1
+        fi
+    fi
+    return 0
+}
 
